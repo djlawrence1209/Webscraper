@@ -3,6 +3,11 @@ from selenium.webdriver.chrome.service import Service
 import time
 from bs4 import BeautifulSoup
 import re
+import platform
+import os
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.core.os_manager import ChromeType
 
 def scrape_website(website):
     print("Launching chrome browser in headless mode...")
@@ -23,15 +28,40 @@ def scrape_website(website):
         print(f"URL validation error: {e}")
         return f"<p>Invalid URL: {website}</p>"
 
-    chrome_driver_path = "./chromedriver.exe"
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless")  # Run in headless mode (no UI)
-    options.add_argument("--disable-gpu")  # Disable GPU acceleration (recommended for headless mode)
-    options.add_argument("--no-sandbox")  # Bypass OS security model
-    options.add_argument("--disable-dev-shm-usage")  # Overcome limited resources in some environments
-
+    options.add_argument("--headless")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    
+    # Add additional options needed for cloud environments
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-setuid-sandbox")
+    options.add_argument("--single-process")
+    
+    # Check if running on Render or other cloud platform
+    if os.environ.get('RENDER') or os.environ.get('DYNO'):
+        print("Running on cloud platform, using special configuration")
+        options.add_argument("--disable-infobars")
+        options.add_argument("--ignore-certificate-errors")
+        options.add_argument("--remote-debugging-port=9222")
+        options.binary_location = "/usr/bin/google-chrome"  # Common location on Linux cloud platforms
+    
     try:
-        driver = webdriver.Chrome(service=Service(chrome_driver_path), options=options)
+        # Use webdriver-manager to handle driver installation automatically
+        print("Setting up Chrome driver with webdriver-manager...")
+        if platform.system() == "Windows":
+            # Windows-specific setup
+            driver = webdriver.Chrome(
+                service=Service(ChromeDriverManager().install()),
+                options=options
+            )
+        else:
+            # Linux/Mac setup
+            driver = webdriver.Chrome(
+                service=Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install()),
+                options=options
+            )
         
         # Set page load timeout to avoid hanging
         driver.set_page_load_timeout(30)

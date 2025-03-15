@@ -1,6 +1,7 @@
 import streamlit as st 
 import contextlib
 import re
+import os
 from scrape import (
     scrape_website, 
     split_dom_content, 
@@ -8,6 +9,16 @@ from scrape import (
     extract_body_content
 )
 from parse import parse_with_ollama
+
+# Detect if running on cloud platform
+is_cloud_platform = os.environ.get('RENDER') or os.environ.get('DYNO')
+if is_cloud_platform:
+    st.set_page_config(
+        page_title="AI Web Scraper",
+        page_icon="🔍",
+        layout="wide",
+        initial_sidebar_state="collapsed"
+    )
 
 # Add custom CSS for styling the buttons and spinner
 custom_css = """
