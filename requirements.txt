@@ -1,8 +1,11 @@
-streamlit 
-langchain 
+streamlit
+langchain
 langchain_ollama
 selenium
 beautifulsoup4
-lxml 
+lxml
 html5lib
 python-dotenv
+
+# Required for Selenium headless mode
+webdriver-manager
