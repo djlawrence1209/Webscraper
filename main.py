@@ -2,6 +2,8 @@ import streamlit as st
 import contextlib
 import re
 import os
+import platform
+import shutil
 from scrape import (
     scrape_website, 
     split_dom_content, 
@@ -9,6 +11,21 @@ from scrape import (
     extract_body_content
 )
 from parse import parse_with_ollama
+
+# Detect if Chrome is installed
+def is_chrome_installed():
+    """Check if Chrome is installed on the system"""
+    if platform.system() == "Windows":
+        chrome_paths = [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            os.path.expanduser(r"~\AppData\Local\Google\Chrome\Application\chrome.exe")
+        ]
+        return any(os.path.exists(path) for path in chrome_paths)
+    elif platform.system() == "Darwin":  # macOS
+        return os.path.exists("/Applications/Google Chrome.app")
+    else:  # Linux
+        return shutil.which("google-chrome") is not None or shutil.which("chromium-browser") is not None
 
 # Detect if running on cloud platform
 is_cloud_platform = os.environ.get('RENDER') or os.environ.get('DYNO')
@@ -18,6 +35,11 @@ if is_cloud_platform:
         page_icon="🔍",
         layout="wide",
         initial_sidebar_state="collapsed"
+    )
+else:
+    st.set_page_config(
+        page_title="AI Web Scraper",
+        page_icon="🔍"
     )
 
 # Add custom CSS for styling the buttons and spinner
@@ -262,6 +284,17 @@ def is_valid_url(url):
     return True, ""
 
 st.title("AI Web Scraper")
+
+# Display Chrome installation warning if needed
+if not is_cloud_platform and not is_chrome_installed():
+    st.warning("""
+    ⚠️ Google Chrome doesn't appear to be installed on this system. 
+    
+    The web scraper requires Google Chrome to function properly. Please install Chrome and restart the application.
+    
+    [Download Chrome](https://www.google.com/chrome/)
+    """)
+
 url = st.text_input("Enter a Website URL: ")
 st.markdown("<div class='example-text'>Example: https://djlawrence1209.com/</div>", unsafe_allow_html=True)
 

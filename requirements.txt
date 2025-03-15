@@ -1,11 +1,14 @@
-streamlit
-langchain
-langchain_ollama
-selenium
-beautifulsoup4
-lxml
-html5lib
-python-dotenv
+streamlit>=1.29.0
+langchain>=0.0.300
+langchain_ollama>=0.0.1
+selenium>=4.15.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+html5lib>=1.1
+python-dotenv>=1.0.0
 
 # Required for Selenium headless mode
-webdriver-manager
+webdriver-manager>=4.0.0
+
+# Required for Chrome detection
+psutil>=5.9.0
