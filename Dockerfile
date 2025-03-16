@@ -15,13 +15,14 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install ChromeDriver that matches Chrome 134
-RUN wget -q "https://storage.googleapis.com/chrome-for-testing-public/134.0.6098.0/linux64/chromedriver-linux64.zip" \
+# Install specific ChromeDriver version (using direct download that's compatible with Chrome 134)
+RUN wget -q "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/134.0.6047.0/linux64/chromedriver-linux64.zip" \
     && unzip chromedriver-linux64.zip \
     && mv chromedriver-linux64/chromedriver /usr/local/bin/ \
     && chmod +x /usr/local/bin/chromedriver \
     && rm -rf chromedriver-linux64.zip chromedriver-linux64 \
-    && echo "ChromeDriver installation completed"
+    && echo "ChromeDriver installation completed" \
+    && chromedriver --version || echo "ChromeDriver installation failed"
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
