@@ -69,12 +69,13 @@ if st.button("Scrape Site"):
             text_chunks = [cleaned_text[i:i+4000] for i in range(0, len(cleaned_text), 4000)]
             st.session_state.text_chunks = text_chunks
             
-            # Show extracted text
-            st.subheader("Extracted Text")
-            st.text_area("Extracted Content", value=cleaned_text[:5000] + ("..." if len(cleaned_text) > 5000 else ""), height=300)
-            
             # Reset previous parsing results when new content is scraped
             st.session_state.parsed_result = None
+
+# Always show extracted text if we have content
+if st.session_state.cleaned_text:
+    st.subheader("Extracted Text")
+    st.text_area("Extracted Content", value=st.session_state.cleaned_text[:5000] + ("..." if len(st.session_state.cleaned_text) > 5000 else ""), height=300)
 
 # Only show parsing section if we have content
 if st.session_state.text_chunks:
@@ -93,24 +94,36 @@ if st.session_state.text_chunks:
         st.session_state.parsing_in_progress = True
         
         with st.spinner("Parsing content with Ollama..."):
-            # Only parse if we don't already have a result or if this is a new parse request
-            if st.session_state.parsed_result is None:
-                parsed_content = parse_with_ollama(st.session_state.text_chunks, parse_description)
-                st.session_state.parsed_result = parsed_content
-            else:
-                parsed_content = st.session_state.parsed_result
+            # Get the text chunks from session state
+            text_chunks = st.session_state.text_chunks
             
-            # Display the parsed content
-            st.subheader("Parsed Content")
-            st.write(parsed_content)
+            # Check if text chunks exist and are not empty
+            if not text_chunks or not any(chunk.strip() for chunk in text_chunks):
+                st.error("No content to parse. Please scrape a website first.")
+                st.session_state.parsing_in_progress = False
+            else:
+                # Process with Ollama
+                parsed_content = parse_with_ollama(text_chunks, parse_description)
+                
+                # Check if we got a valid result
+                if parsed_content == "No relevant information found in the content.":
+                    # Try one more time with a longer chunk to make sure we're sending enough content
+                    if st.session_state.cleaned_text:
+                        # Create larger chunks
+                        larger_chunks = [st.session_state.cleaned_text[i:i+6000] for i in range(0, len(st.session_state.cleaned_text), 6000)]
+                        # Try again with larger chunks
+                        parsed_content = parse_with_ollama(larger_chunks, parse_description)
+                
+                # Store the result
+                st.session_state.parsed_result = parsed_content
         
         # Reset the flag after parsing is complete
         st.session_state.parsing_in_progress = False
     
-    # If we have a previous parsing result, display it
-    elif st.session_state.parsed_result is not None:
+    # Display parsing results
+    if st.session_state.parsed_result:
         st.subheader("Parsed Content")
-        st.write(st.session_state.parsed_result)
+        st.markdown(st.session_state.parsed_result)
 
 # How it works section
 st.markdown("---")
