@@ -3,17 +3,30 @@ import sys
 import os
 
 def install_playwright_browsers():
-    """Install Playwright browsers when running on Streamlit Cloud"""
+    """Install Playwright browsers for the application"""
     try:
-        # Check if we're running on Streamlit Cloud
-        if "STREAMLIT_SHARING" in os.environ or "STREAMLIT_CLOUD" in os.environ:
-            print("Running on Streamlit Cloud, installing Playwright browsers...")
+        print("Checking for Playwright browsers...")
+        
+        # Always install Chromium browser for Playwright
+        try:
             subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
-            print("Playwright browsers installed successfully")
-        else:
-            print("Not running on Streamlit Cloud, skipping Playwright browsers installation")
+            print("Playwright Chromium browser installed successfully")
+        except Exception as e:
+            print(f"Error installing Playwright Chromium: {e}")
+            print("Trying alternative installation method...")
+            
+            # Try installing with pip if direct method fails
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "playwright"])
+                subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
+                print("Playwright installed and Chromium browser installed via pip")
+            except Exception as e2:
+                print(f"Failed to install Playwright browsers: {e2}")
+                print("You may need to manually install Playwright browsers with:")
+                print("  python -m playwright install chromium")
+                
     except Exception as e:
-        print(f"Error installing Playwright browsers: {e}")
+        print(f"Error during Playwright setup: {e}")
 
 if __name__ == "__main__":
     install_playwright_browsers() 
