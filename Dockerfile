@@ -15,15 +15,14 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install ChromeDriver - using a more reliable version detection strategy
-RUN CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d. -f1) \
+# Install a specific version of ChromeDriver known to work with Chrome 134
+RUN CHROME_VERSION=$(google-chrome --version) \
     && echo "Detected Chrome version: $CHROME_VERSION" \
     && mkdir -p /tmp/chromedriver \
     && cd /tmp/chromedriver \
-    && wget -q https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION \
-    && CHROMEDRIVER_VERSION=$(cat LATEST_RELEASE_$CHROME_VERSION) \
+    && CHROMEDRIVER_VERSION="114.0.5735.90" \
     && echo "Using ChromeDriver version: $CHROMEDRIVER_VERSION" \
-    && wget -q https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip \
+    && wget -q "https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip" \
     && unzip chromedriver_linux64.zip \
     && chmod +x chromedriver \
     && mv chromedriver /usr/local/bin/ \
