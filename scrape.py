@@ -12,6 +12,7 @@ import sys
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.core.os_manager import ChromeType
+import streamlit as st
 
 def kill_chrome_processes():
     """Terminate any hanging Chrome processes on Windows"""
@@ -99,10 +100,22 @@ def find_chromedriver():
     print("No ChromeDriver found in common locations")
     return None
 
+def is_streamlit_cloud():
+    """Check if running on Streamlit Cloud"""
+    return "STREAMLIT_SHARING" in os.environ or "STREAMLIT_CLOUD" in os.environ
+
 def download_chromedriver_if_needed():
     """Attempt to download and install ChromeDriver if not found"""
     if platform.system() == "Windows":
         return None  # We'll use ChromeDriverManager on Windows
+    
+    # Streamlit Cloud has restrictions on writing to certain directories
+    if is_streamlit_cloud():
+        try:
+            return ChromeDriverManager().install()
+        except Exception as e:
+            print(f"Error using ChromeDriverManager on Streamlit Cloud: {e}")
+            return None
     
     try:
         # First check if we already have ChromeDriver
@@ -129,8 +142,13 @@ def download_chromedriver_if_needed():
         os.makedirs(driver_dir, exist_ok=True)
         
         # Get latest ChromeDriver version for this Chrome version
-        version_url = f"https://chromedriver.storage.googleapis.com/LATEST_RELEASE_{chrome_version}"
-        chromedriver_version = subprocess.check_output(f"curl -s {version_url}", shell=True).decode().strip()
+        try:
+            version_url = f"https://chromedriver.storage.googleapis.com/LATEST_RELEASE_{chrome_version}"
+            chromedriver_version = subprocess.check_output(f"curl -s {version_url}", shell=True).decode().strip()
+        except:
+            # Fallback to a known working version if version detection fails
+            chromedriver_version = "114.0.5735.90"
+            print(f"Version detection failed, using fallback version: {chromedriver_version}")
         
         print(f"Using ChromeDriver version: {chromedriver_version}")
         
@@ -171,7 +189,14 @@ def scrape_website(website):
     # Create a temporary directory for Chrome data
     temp_dir = None
     try:
-        temp_dir = tempfile.mkdtemp(prefix="chrome_scraper_")
+        # Use a more reliable temp dir approach for Streamlit Cloud
+        if is_streamlit_cloud():
+            # Streamlit Cloud may have restrictions on certain temp directories
+            temp_dir = os.path.join(os.path.expanduser("~"), ".streamlit_chrome_temp")
+            os.makedirs(temp_dir, exist_ok=True)
+        else:
+            temp_dir = tempfile.mkdtemp(prefix="chrome_scraper_")
+        
         print(f"Created temporary directory for Chrome: {temp_dir}")
         
         options = webdriver.ChromeOptions()
@@ -187,13 +212,16 @@ def scrape_website(website):
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument("--window-size=1920,1080")
         
-        # Check if running on Render or other cloud platform
-        if os.environ.get('RENDER') or os.environ.get('DYNO'):
+        # Add more options that help with Streamlit Cloud
+        options.add_argument('--disable-features=NetworkService')
+        options.add_argument('--disable-features=VizDisplayCompositor')
+        options.add_argument('--disable-breakpad')
+        options.add_argument('--disable-infobars')
+        options.add_argument('--ignore-certificate-errors')
+        
+        # Check if running on Render, Streamlit Cloud or other cloud platform
+        if os.environ.get('RENDER') or os.environ.get('DYNO') or is_streamlit_cloud():
             print("Running on cloud platform, using special configuration")
-            options.add_argument("--disable-infobars")
-            options.add_argument("--ignore-certificate-errors")
-            options.add_argument("--disable-software-rasterizer")
-            options.add_argument("--remote-debugging-port=9222")
             options.add_argument("--single-process")  # Important for resource-constrained environments
             
             # Find Chrome binary
@@ -215,8 +243,22 @@ def scrape_website(website):
         # Get ChromeDriver path - Try different methods
         chromedriver_path = None
         
+        # Special handling for Streamlit Cloud
+        if is_streamlit_cloud():
+            print("Running on Streamlit Cloud")
+            try:
+                # Try to use ChromeDriverManager which should work on Streamlit Cloud
+                driver = webdriver.Chrome(
+                    service=Service(ChromeDriverManager().install()),
+                    options=options
+                )
+            except Exception as e:
+                print(f"Failed with ChromeDriverManager: {e}")
+                # Last resort: Let Selenium try to find it
+                driver = webdriver.Chrome(options=options)
+                
         # For Docker environment, check if we need to download ChromeDriver
-        if os.environ.get('RENDER_ENV_IS_DOCKER'):
+        elif os.environ.get('RENDER_ENV_IS_DOCKER'):
             print("Running in Docker environment")
             # Try to find existing ChromeDriver
             chromedriver_path = find_chromedriver()
@@ -299,8 +341,23 @@ def scrape_website(website):
         print(f"Error initializing WebDriver: {e}")
         error_msg = str(e)
         
+        # Check if running on Streamlit Cloud
+        if is_streamlit_cloud():
+            system_info = f"Python {sys.version}, Platform: {platform.platform()}"
+            environment_vars = "\n".join([f"{k}={v}" for k, v in os.environ.items() if k.startswith(("CHROME", "PATH", "STREAMLIT"))])
+            
+            # Create a more user-friendly error message for Streamlit Cloud
+            return f"""<p>Failed to initialize Chrome browser on Streamlit Cloud: {error_msg}</p>
+            <p>This may be due to Streamlit Cloud's limitations with Selenium.</p>
+            <details>
+                <summary>Technical Details (click to expand)</summary>
+                <pre>{system_info}\n\n{environment_vars}</pre>
+            </details>
+            <p>Consider trying the app locally or on another hosting platform like Render.</p>
+            """
+            
         # Cloud platform specific troubleshooting
-        if os.environ.get('RENDER') or os.environ.get('DYNO'):
+        elif os.environ.get('RENDER') or os.environ.get('DYNO'):
             # Get system information to help diagnose
             system_info = f"Python {sys.version}, Platform: {platform.platform()}"
             environment_vars = "\n".join([f"{k}={v}" for k, v in os.environ.items() if k.startswith(("CHROME", "PATH", "RENDER"))])
@@ -385,7 +442,7 @@ def scrape_website(website):
             return f"<p>Failed to initialize browser: {error_msg}</p>"
     finally:
         # Clean up temporary directory
-        if temp_dir and os.path.exists(temp_dir):
+        if temp_dir and os.path.exists(temp_dir) and not is_streamlit_cloud():
             try:
                 shutil.rmtree(temp_dir)
                 print(f"Removed temporary Chrome directory: {temp_dir}")

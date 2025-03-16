@@ -1,14 +1,14 @@
-streamlit>=1.29.0
-langchain>=0.0.300
-langchain_ollama>=0.0.1
-selenium>=4.15.0
-beautifulsoup4>=4.12.0
-lxml>=4.9.0
-html5lib>=1.1
-python-dotenv>=1.0.0
+streamlit>=1.28.0
+selenium==4.15.0
+beautifulsoup4==4.12.2
+webdriver-manager>=4.0.0
+regex>=2023.10.3
+langchain>=0.0.335
+langchain-ollama>=0.1.0
+langchain-core>=0.1.0
+pytest-playwright
+playwright
+requests
 
 # Required for Selenium headless mode
-webdriver-manager>=4.0.0
-
-# Required for Chrome detection
 psutil>=5.9.0
