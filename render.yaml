@@ -2,7 +2,7 @@ services:
   - type: web
     name: ai-web-scraper
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: bash build.sh
     startCommand: streamlit run main.py --server.port $PORT --server.address 0.0.0.0
     envVars:
       - key: PYTHONUNBUFFERED
@@ -11,4 +11,11 @@ services:
         value: true
     packages:
       - google-chrome-stable
-      - chromium-driver 
+      - chromium-browser
+      - chromium-driver
+      - wget
+      - curl
+      - unzip
+      - gnupg
+      - apt-transport-https
+      - ca-certificates 

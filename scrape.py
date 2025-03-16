@@ -18,6 +18,32 @@ def kill_chrome_processes():
     print("Chrome process management disabled to preserve user's browser tabs")
     return
 
+def find_chrome_binary():
+    """Find Chrome binary on different systems"""
+    # Common Chrome binary locations on different systems
+    chrome_paths = [
+        # Linux paths
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        # Add Render specific paths
+        "/opt/render/project/chrome-bin/chrome",
+        "/opt/google/chrome/chrome",
+        # Windows paths
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    ]
+    
+    # Check if any of the paths exist
+    for path in chrome_paths:
+        if os.path.exists(path):
+            print(f"Chrome binary found at: {path}")
+            return path
+    
+    print("No Chrome binary found in common locations")
+    return None
+
 def scrape_website(website):
     print("Launching chrome browser in headless mode...")
 
@@ -61,8 +87,16 @@ def scrape_website(website):
             print("Running on cloud platform, using special configuration")
             options.add_argument("--disable-infobars")
             options.add_argument("--ignore-certificate-errors")
+            options.add_argument("--disable-software-rasterizer")
             options.add_argument("--remote-debugging-port=9222")
-            options.binary_location = "/usr/bin/google-chrome"  # Common location on Linux cloud platforms
+            
+            # Find Chrome binary
+            chrome_binary = find_chrome_binary()
+            if chrome_binary:
+                print(f"Setting Chrome binary to: {chrome_binary}")
+                options.binary_location = chrome_binary
+            else:
+                print("WARNING: No Chrome binary found. This may cause issues.")
         
         print("Setting up Chrome driver with webdriver-manager...")
         if platform.system() == "Windows":
@@ -75,10 +109,25 @@ def scrape_website(website):
         else:
             # Linux/Mac setup
             print("Using Linux/Mac Chrome setup")
-            driver = webdriver.Chrome(
-                service=Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install()),
-                options=options
-            )
+            try:
+                driver = webdriver.Chrome(
+                    service=Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install()),
+                    options=options
+                )
+            except Exception as e:
+                print(f"Failed to use ChromeDriverManager: {e}")
+                print("Trying direct ChromeDriver path...")
+                
+                # Try to use ChromeDriver directly if webdriver_manager fails
+                chromedriver_path = "/usr/local/bin/chromedriver"
+                if os.path.exists(chromedriver_path):
+                    print(f"Using ChromeDriver at: {chromedriver_path}")
+                    driver = webdriver.Chrome(
+                        service=Service(chromedriver_path),
+                        options=options
+                    )
+                else:
+                    raise Exception(f"ChromeDriver not found at {chromedriver_path}")
         
         # Set page load timeout to avoid hanging
         driver.set_page_load_timeout(30)
@@ -101,8 +150,29 @@ def scrape_website(website):
         print(f"Error initializing WebDriver: {e}")
         error_msg = str(e)
         
+        # Cloud platform specific troubleshooting
+        if os.environ.get('RENDER') or os.environ.get('DYNO'):
+            # Get a list of available packages and binaries to help diagnose
+            try:
+                print("Checking system for Chrome installation:")
+                if os.path.exists("/usr/bin"):
+                    print("Contents of /usr/bin (grep chrome):")
+                    os.system("ls -la /usr/bin | grep -i chrome")
+                
+                print("Checking installed packages:")
+                os.system("apt list --installed | grep -i chrome")
+                
+                print("Checking for Chromium:")
+                os.system("which chromium-browser")
+            except:
+                pass
+                
+            return f"""<p>Failed to initialize Chrome browser on cloud platform: {error_msg}</p>
+            <p>This appears to be a server-side issue with Chrome configuration.</p>
+            """
+        
         # Windows-specific troubleshooting suggestions
-        if platform.system() == "Windows":
+        elif platform.system() == "Windows":
             return f"""<p>Failed to initialize Chrome browser: {error_msg}</p>
             <p>Try these troubleshooting steps:</p>
             <ol>
