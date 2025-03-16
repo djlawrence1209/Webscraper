@@ -15,14 +15,22 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install specific ChromeDriver version (using direct download that's compatible with Chrome 134)
-RUN wget -q "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/134.0.6047.0/linux64/chromedriver-linux64.zip" \
-    && unzip chromedriver-linux64.zip \
-    && mv chromedriver-linux64/chromedriver /usr/local/bin/ \
-    && chmod +x /usr/local/bin/chromedriver \
-    && rm -rf chromedriver-linux64.zip chromedriver-linux64 \
-    && echo "ChromeDriver installation completed" \
-    && chromedriver --version || echo "ChromeDriver installation failed"
+# Install ChromeDriver - using a more reliable version detection strategy
+RUN CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d. -f1) \
+    && echo "Detected Chrome version: $CHROME_VERSION" \
+    && mkdir -p /tmp/chromedriver \
+    && cd /tmp/chromedriver \
+    && wget -q https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION \
+    && CHROMEDRIVER_VERSION=$(cat LATEST_RELEASE_$CHROME_VERSION) \
+    && echo "Using ChromeDriver version: $CHROMEDRIVER_VERSION" \
+    && wget -q https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip \
+    && unzip chromedriver_linux64.zip \
+    && chmod +x chromedriver \
+    && mv chromedriver /usr/local/bin/ \
+    && rm -rf /tmp/chromedriver \
+    && echo "ChromeDriver installed at: $(which chromedriver)" \
+    && echo "ChromeDriver version: $(chromedriver --version)" \
+    && ln -sf /usr/local/bin/chromedriver /usr/bin/chromedriver
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
