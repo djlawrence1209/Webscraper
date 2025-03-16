@@ -8,6 +8,7 @@ import os
 import subprocess
 import tempfile
 import shutil
+import sys
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.core.os_manager import ChromeType
@@ -41,7 +42,58 @@ def find_chrome_binary():
             print(f"Chrome binary found at: {path}")
             return path
     
+    # Try using which command on Linux/Mac
+    if platform.system() != "Windows":
+        try:
+            which_chrome = subprocess.check_output(["which", "google-chrome"], stderr=subprocess.STDOUT).decode().strip()
+            if which_chrome:
+                print(f"Chrome binary found using 'which': {which_chrome}")
+                return which_chrome
+        except:
+            pass
+        
+        try:
+            which_chromium = subprocess.check_output(["which", "chromium-browser"], stderr=subprocess.STDOUT).decode().strip()
+            if which_chromium:
+                print(f"Chromium binary found using 'which': {which_chromium}")
+                return which_chromium
+        except:
+            pass
+    
     print("No Chrome binary found in common locations")
+    return None
+
+def find_chromedriver():
+    """Find ChromeDriver binary"""
+    # Check in PATH first
+    try:
+        if platform.system() == "Windows":
+            which_cmd = "where"
+        else:
+            which_cmd = "which"
+        
+        driver_path = subprocess.check_output([which_cmd, "chromedriver"], stderr=subprocess.STDOUT).decode().strip()
+        if driver_path:
+            print(f"ChromeDriver found in PATH: {driver_path}")
+            return driver_path
+    except:
+        pass
+    
+    # Check common locations
+    driver_paths = [
+        # Custom location for Render
+        os.path.expanduser("~/.local/bin/chromedriver"),
+        # Standard locations
+        "/usr/local/bin/chromedriver",
+        "/usr/bin/chromedriver",
+    ]
+    
+    for path in driver_paths:
+        if os.path.exists(path):
+            print(f"ChromeDriver found at: {path}")
+            return path
+    
+    print("No ChromeDriver found in common locations")
     return None
 
 def scrape_website(website):
@@ -89,6 +141,7 @@ def scrape_website(website):
             options.add_argument("--ignore-certificate-errors")
             options.add_argument("--disable-software-rasterizer")
             options.add_argument("--remote-debugging-port=9222")
+            options.add_argument("--single-process")  # Important for resource-constrained environments
             
             # Find Chrome binary
             chrome_binary = find_chrome_binary()
@@ -97,37 +150,55 @@ def scrape_website(website):
                 options.binary_location = chrome_binary
             else:
                 print("WARNING: No Chrome binary found. This may cause issues.")
+
+            # Add directory with ChromeDriver to PATH if in Render
+            local_bin = os.path.expanduser("~/.local/bin")
+            if os.path.exists(local_bin):
+                os.environ["PATH"] = f"{local_bin}:{os.environ.get('PATH', '')}"
+                print(f"Added {local_bin} to PATH")
         
-        print("Setting up Chrome driver with webdriver-manager...")
+        # Find an appropriate ChromeDriver
+        chromedriver_path = find_chromedriver()
+        
+        print("Setting up Chrome driver...")
         if platform.system() == "Windows":
             # Windows-specific setup
             print("Using Windows-specific Chrome setup")
-            driver = webdriver.Chrome(
-                service=Service(ChromeDriverManager().install()),
-                options=options
-            )
-        else:
-            # Linux/Mac setup
-            print("Using Linux/Mac Chrome setup")
             try:
                 driver = webdriver.Chrome(
-                    service=Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install()),
+                    service=Service(ChromeDriverManager().install()),
                     options=options
                 )
             except Exception as e:
-                print(f"Failed to use ChromeDriverManager: {e}")
-                print("Trying direct ChromeDriver path...")
-                
-                # Try to use ChromeDriver directly if webdriver_manager fails
-                chromedriver_path = "/usr/local/bin/chromedriver"
-                if os.path.exists(chromedriver_path):
-                    print(f"Using ChromeDriver at: {chromedriver_path}")
+                print(f"Failed with ChromeDriverManager: {e}")
+                # Fallback to found driver
+                if chromedriver_path:
                     driver = webdriver.Chrome(
                         service=Service(chromedriver_path),
                         options=options
                     )
                 else:
-                    raise Exception(f"ChromeDriver not found at {chromedriver_path}")
+                    raise e
+        else:
+            # Linux/Mac setup
+            print("Using Linux/Mac Chrome setup")
+            if chromedriver_path:
+                print(f"Using ChromeDriver at: {chromedriver_path}")
+                driver = webdriver.Chrome(
+                    service=Service(chromedriver_path),
+                    options=options
+                )
+            else:
+                try:
+                    driver = webdriver.Chrome(
+                        service=Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install()),
+                        options=options
+                    )
+                except Exception as e:
+                    # Provide more context about the error
+                    error_details = str(e)
+                    system_details = f"Python {sys.version}, OS: {platform.system()} {platform.release()}"
+                    raise Exception(f"{error_details}\nSystem info: {system_details}")
         
         # Set page load timeout to avoid hanging
         driver.set_page_load_timeout(30)
@@ -152,23 +223,32 @@ def scrape_website(website):
         
         # Cloud platform specific troubleshooting
         if os.environ.get('RENDER') or os.environ.get('DYNO'):
-            # Get a list of available packages and binaries to help diagnose
+            # Get system information to help diagnose
+            system_info = f"Python {sys.version}, Platform: {platform.platform()}"
+            environment_vars = "\n".join([f"{k}={v}" for k, v in os.environ.items() if k.startswith(("CHROME", "PATH", "RENDER"))])
+            
+            # Try to get some diagnostic info
+            diagnostics = []
             try:
-                print("Checking system for Chrome installation:")
+                diagnostics.append(f"PATH: {os.environ.get('PATH', 'Not set')}")
+                
                 if os.path.exists("/usr/bin"):
-                    print("Contents of /usr/bin (grep chrome):")
-                    os.system("ls -la /usr/bin | grep -i chrome")
+                    chrome_bins = subprocess.check_output("find /usr/bin -name '*chrome*' 2>/dev/null || true", shell=True).decode()
+                    diagnostics.append(f"Chrome binaries in /usr/bin: {chrome_bins}")
                 
-                print("Checking installed packages:")
-                os.system("apt list --installed | grep -i chrome")
-                
-                print("Checking for Chromium:")
-                os.system("which chromium-browser")
+                chromium_location = subprocess.check_output("which chromium-browser 2>/dev/null || echo 'Not found'", shell=True).decode().strip()
+                diagnostics.append(f"Chromium location: {chromium_location}")
             except:
-                pass
+                diagnostics.append("Failed to collect diagnostic information")
+            
+            diagnostic_info = "\n".join(diagnostics)
                 
             return f"""<p>Failed to initialize Chrome browser on cloud platform: {error_msg}</p>
             <p>This appears to be a server-side issue with Chrome configuration.</p>
+            <details>
+                <summary>Technical Details (click to expand)</summary>
+                <pre>{system_info}\n\n{environment_vars}\n\n{diagnostic_info}</pre>
+            </details>
             """
         
         # Windows-specific troubleshooting suggestions
