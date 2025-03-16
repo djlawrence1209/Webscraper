@@ -81,6 +81,8 @@ def find_chromedriver():
     
     # Check common locations
     driver_paths = [
+        # Docker container location
+        "/usr/local/bin/chromedriver",
         # Custom location for Render
         os.path.expanduser("~/.local/bin/chromedriver"),
         # Standard locations
@@ -157,11 +159,16 @@ def scrape_website(website):
                 os.environ["PATH"] = f"{local_bin}:{os.environ.get('PATH', '')}"
                 print(f"Added {local_bin} to PATH")
         
-        # Find an appropriate ChromeDriver
-        chromedriver_path = find_chromedriver()
-        
         print("Setting up Chrome driver...")
-        if platform.system() == "Windows":
+        
+        # For Render Docker environment, always use the ChromeDriver we installed in the Dockerfile
+        if os.environ.get('RENDER_ENV_IS_DOCKER'):
+            print("Using Docker-installed ChromeDriver from /usr/local/bin/chromedriver")
+            driver = webdriver.Chrome(
+                service=Service("/usr/local/bin/chromedriver"),
+                options=options
+            )
+        elif platform.system() == "Windows":
             # Windows-specific setup
             print("Using Windows-specific Chrome setup")
             try:
@@ -172,6 +179,7 @@ def scrape_website(website):
             except Exception as e:
                 print(f"Failed with ChromeDriverManager: {e}")
                 # Fallback to found driver
+                chromedriver_path = find_chromedriver()
                 if chromedriver_path:
                     driver = webdriver.Chrome(
                         service=Service(chromedriver_path),
@@ -182,6 +190,7 @@ def scrape_website(website):
         else:
             # Linux/Mac setup
             print("Using Linux/Mac Chrome setup")
+            chromedriver_path = find_chromedriver()
             if chromedriver_path:
                 print(f"Using ChromeDriver at: {chromedriver_path}")
                 driver = webdriver.Chrome(
@@ -238,6 +247,20 @@ def scrape_website(website):
                 
                 chromium_location = subprocess.check_output("which chromium-browser 2>/dev/null || echo 'Not found'", shell=True).decode().strip()
                 diagnostics.append(f"Chromium location: {chromium_location}")
+                
+                # Check installed ChromeDriver version
+                try:
+                    chromedriver_version = subprocess.check_output("chromedriver --version", shell=True).decode().strip()
+                    diagnostics.append(f"ChromeDriver version: {chromedriver_version}")
+                except:
+                    diagnostics.append("Could not determine ChromeDriver version")
+                    
+                # Check if Docker-installed ChromeDriver exists
+                if os.path.exists("/usr/local/bin/chromedriver"):
+                    docker_driver_version = subprocess.check_output("/usr/local/bin/chromedriver --version", shell=True).decode().strip()
+                    diagnostics.append(f"Docker ChromeDriver version: {docker_driver_version}")
+                else:
+                    diagnostics.append("Docker ChromeDriver not found at /usr/local/bin/chromedriver")
             except:
                 diagnostics.append("Failed to collect diagnostic information")
             
